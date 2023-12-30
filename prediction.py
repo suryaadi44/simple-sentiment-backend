@@ -22,7 +22,7 @@ async def get_stat():
         negative = total - positive
 
         seven_days_ago = datetime.utcnow() - timedelta(days=7)
-        pipeline = [
+        pipelinePositive = [
             {
                 "$match": {
                     "time": {
@@ -39,20 +39,49 @@ async def get_stat():
                 }
             },
         ]
+        pipelineNegative = [
+            {
+                "$match": {
+                    "time": {
+                        "$gte": datetime(seven_days_ago.year, seven_days_ago.month, seven_days_ago.day),
+                        "$lte": datetime.utcnow(),
+                    },
+                    "prediction": 0,
+                }
+            },
+            {
+                "$group": {
+                    "_id": {"$dateToString": {"format": "%Y-%m-%d", "date": "$time"}},
+                    "count": {"$sum": 1},
+                }
+            },
+        ]
 
-        res = predictions_collection.aggregate(pipeline)
+        resPositive = predictions_collection.aggregate(pipelinePositive)
 
-        data = []
+        dataPositive = []
         for r in range(7):
             date = datetime.utcnow() - timedelta(days=7) + timedelta(days=r)
             date_str = date.strftime("%Y-%m-%d")
-            data.append({"date": date_str, "count": 0})
+            dataPositive.append({"date": date_str, "count": 0})
 
-        for r in res:
-            for d in data:
+        for r in resPositive:
+            for d in dataPositive:
                 if d["date"] == r["_id"]:
                     d["count"] = r["count"]
 
+        resNegative = predictions_collection.aggregate(pipelineNegative)
+
+        dataNegative = []
+        for r in range(7):
+            date = datetime.utcnow() - timedelta(days=7) + timedelta(days=r)
+            date_str = date.strftime("%Y-%m-%d")
+            dataNegative.append({"date": date_str, "count": 0})
+        
+        for r in resNegative:
+            for d in dataNegative:
+                if d["date"] == r["_id"]:
+                    d["count"] = r["count"]
 
         return JSONResponse(
             status_code=200,
@@ -63,7 +92,8 @@ async def get_stat():
                     "total": total,
                     "positive": positive,
                     "negative": negative,
-                    "daily": data,
+                    "dailyPositive": dataPositive,
+                    "dailyNegative": dataNegative,
                 },
             },
         )
